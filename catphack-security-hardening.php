@@ -2,8 +2,8 @@
 /*
 Plugin Name: CaptHack Security Hardening
 Plugin URI: https://capturethehack.com.mx/
-Description: This plugin helps you hardening your wordpress website to most common vulnerabilities
-Version: 0.9
+Description: This plugin helps you hardening your wordpress website. Based on Acunetix Web Scan
+Version: 0.9.4
 Text Domain: capthack-security-hardening
 Author: Eduardo@CTH
 
@@ -429,7 +429,30 @@ function wp_capthack_header_todo( $headers ){
 }
 
 //Response headers for blog / webpage
-add_filter('wp_headers', 'wp_capthack_header_todo');
+//add_filter('wp_headers', 'wp_capthack_header_todo'); Replaced by send_headers hook
+
+function wp_capthack_header_send() {
+	header( 'X-XSS-Protection: 1; mode=block' );
+	header( 'Strict-Transport-Security: max-age=63072000; includeSubDomains; preload' );
+	header( 'Expect-CT: max-age=7776000, enforce' );
+	header( 'Access-Control-Allow-Origin: null' );
+	header( 'Access-Control-Allow-Methods: GET,PUT,POST' );
+	header( 'Access-Control-Allow-Headers: Content-Type, Authorization' );
+	header( 'X-Content-Security-Policy: default-src "self"; img-src *; media-src * data:;' );
+    header( 'X-Content-Type-Options: nosniff' );
+	header( "Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:" . "; frame-ancestors 'self' " );
+	header( 'Referrer-Policy: strict-origin-when-cross-origin' );
+	header( 'Cross-Origin-Embedder-Policy-Report-Only: unsafe-none; report-to="default"' );
+	header( 'Cross-Origin-Embedder-Policy: unsafe-none; report-to="default"' );
+	header( 'Cross-Origin-Opener-Policy-Report-Only: same-origin; report-to="default"' );
+	header( 'Cross-Origin-Opener-Policy: same-origin-allow-popups; report-to="default"' );
+    header( 'Cross-Origin-Resource-Policy: cross-origin' );
+    header( 'X-Frame-Options: SAMEORIGIN' );
+    header( "Feature-Policy: display-capture 'self'");
+    header( 'X-Permitted-Cross-Domain-Policies: none' );  
+}
+
+add_action( 'send_headers', 'wp_capthack_header_send' );
 
 //Disable XML-RPC
 function wp_capthack_disable_xml_rpc(){
@@ -488,6 +511,7 @@ add_filter('rest_authentication_errors', function ($result) {
 });
 
 //Disable User Enumeration
+/* Removed because it generates a problem on PHP 8.1 and Wordpress 6.4
 function wp_capthack_disable_user_enumeration(){
 
     if (!is_admin()) {
@@ -499,22 +523,12 @@ function wp_capthack_disable_user_enumeration(){
     }
 }
 
-add_action('init', 'wp_capthack_disable_user_enumeration');
-
-function wp_capthack_generate_session(){
-
-    @ini_set('session.cookie_httponly', 1);
-    @ini_set('session.cookie_secure', 1);
-    @ini_set('session.use_only_cookies', 1);
-
-}
-
-add_action( 'init', 'wp_capthack_generate_session');
+add_action('init', 'wp_capthack_disable_user_enumeration'); */
 
 function wp_capthack_csrf_generate_hidden_fields( $fields ){
 
     if ( !isset($_SESSION['wp_capthack_csrf_token'])){
-        $_SESSION['wp_capthack_csrf_token'] = 'wp-capthack-csrf-tkn-' . base64_encode(random_bytes(32));
+        $_SESSION['wp_capthack_csrf_token'] = wp_create_nonce( 'wp_capthack_cf7_csrf' );
     }
 
     $fields['csrf_token'] = $_SESSION['wp_capthack_csrf_token'];
@@ -629,6 +643,10 @@ function wp_capthack_validate_csrf_token( $token ): bool {
         return false;
     }
 
+    if (wp_verify_nonce( $token, 'wp_capthack_cf7_csrf' )){
+    	return true;
+    }
+
     if ($_SESSION['wp_capthack_csrf_token'] === $token) {
         return true;
     }
@@ -700,13 +718,29 @@ function wp_capthack_place_sandbox_attribute_oembed($html, $data, $url){
 
 }
 
+/**
+ * 
+ * $args: PLL_Cookie
+ * Filter to alter 'pll_cookie' flags
+ * 
+ */
+
+function wp_catphack_add_polylang_http_only_cookie_flag( $args ) {
+
+    $cookie_params = array('httponly' => TRUE);
+    $merged_cookie_params = wp_parse_args( $cookie_params, $args );
+    return $merged_cookie_params;
+}
+
+add_filter('pll_cookie_args', 'wp_catphack_add_polylang_http_only_cookie_flag');
+
 /*
  *
  * Methods to remove iFrame cache
- * Future improve, in progress...
+ * 
  */
 
-/* add_filter( 'oembed_dataparse', 'wp_capthack_place_sandbox_attribute_oembed', 99, 4);
+add_filter( 'oembed_dataparse', 'wp_capthack_place_sandbox_attribute_oembed', 99, 4);
 
 add_filter( 'oembed_ttl', function($ttl) {
 	  $GLOBALS['wp_embed']->usecache = 0;
@@ -722,9 +756,6 @@ add_filter( 'embed_oembed_discover', function( $discover )
         $GLOBALS['wp_embed']->usecache = 1;
     return $discover;
 } ); 
-
-*/
-
 
 
 ?>
