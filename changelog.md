@@ -1,5 +1,11 @@
 Changelog
+### 0.9.4
+
+* Added: Option to enable automatic sandbox attribute generation on youtube iframe tag
+* Fixed: Changed csrf token validation from cookie value comparison to wp_nonce_validation()
+
 ### 0.9.3
+
 * Added: Filter to change pll_cookie flags (httpOnly)
 
 ### 0.9.2
