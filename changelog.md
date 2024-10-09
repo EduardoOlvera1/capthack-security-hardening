@@ -1,11 +1,14 @@
 Changelog
+### 0.9.5
+
+* Fixed: Widget caused a crash when executing function strpos() because variable $header_value was giving an array instead of a string
+
 ### 0.9.4
 
-* Added: Option to enable automatic sandbox attribute generation on youtube iframe tag
-* Fixed: Changed csrf token validation from cookie value comparison to wp_nonce_validation()
+* Added: Changed XFO and HSTS header to hardcode on .htaccess with mod_headers
+* Removed: XFO and HSTS header from send_header hook
 
 ### 0.9.3
-
 * Added: Filter to change pll_cookie flags (httpOnly)
 
 ### 0.9.2

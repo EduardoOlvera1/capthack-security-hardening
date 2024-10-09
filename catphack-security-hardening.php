@@ -3,7 +3,7 @@
 Plugin Name: CaptHack Security Hardening
 Plugin URI: https://capturethehack.com.mx/
 Description: This plugin helps you hardening your wordpress website. Based on Acunetix Web Scan
-Version: 0.9.4
+Version: 0.9.5
 Text Domain: capthack-security-hardening
 Author: Eduardo@CTH
 
@@ -270,6 +270,10 @@ function wp_capthack_widget_fill_content() {
         
         $header_value = $headers_current[$key];
 
+        if ( is_array( $header_value ) ){
+            break;
+        }
+
         if ( ! isset( $header_value ))
             if ( $key === "x-powered-by")
                 echo $good;
@@ -345,6 +349,8 @@ function wp_capthack_htaccess_mod( $rules ){
     Header always edit Set-Cookie ^(.*) "$1; HttpOnly"
     Header always edit Set-Cookie ^(.*) "$1; Secure"
     Header always edit Set-Cookie ^(.*) "$1; SameSite=Lax"
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
     </IfModule>
     <FilesMatch "\.(html|psd|log|sh|ini|txt|json)$">
         Order allow,deny
@@ -384,7 +390,13 @@ add_action('rest_api_init', function() {
     remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
 }, 15);
 
-//Rest api custom header
+/* 
+
+REST API Custom Response Headers
+
+** Places CORS headers on the API response
+
+*/
 function wp_capthack_header_rest_response($result, $server, $request){ 
 
     if ( get_option( 'wp_capthack_rest_api_cors' ) !== "on" ){
@@ -400,40 +412,13 @@ function wp_capthack_header_rest_response($result, $server, $request){
 
 add_filter( 'rest_post_dispatch', 'wp_capthack_header_rest_response', 10, 4);
 
-function wp_capthack_header_todo( $headers ){
+function wp_capthack_header_send() {
 
     if (get_option( 'wp_capthack_secure_headers' ) !== "on"){
         return $headers;
     }
 
-    $headers['X-XSS-Protection'] = '1; mode=block';
-    $headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains; preload';
-    $headers['Expect-CT'] = 'max-age=7776000, enforce';
-    $headers['Access-Control-Allow-Origin'] = 'null';
-    $headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST';
-    $headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
-    $headers['X-Content-Security-Policy'] = 'default-src \'self\'; img-src *; media-src * data:;';
-    $headers['X-Content-Type-Options'] = 'nosniff';
-    $headers['Content-Security-Policy'] = "default-src https: data 'unsafe-inline' 'unsafe-eval'" . "; frame-ancestors 'self' ";
-    $headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
-    $headers['Cross-Origin-Embedder-Policy-Report-Only'] = 'unsafe-none; report-to="default"';
-    $headers['Cross-Origin-Embedder-Policy'] = 'unsafe-none; report-to="default"';
-    $headers['Cross-Origin-Opener-Policy-Report-Only'] = 'same-origin; report-to="default"';
-    $headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups; report-to="default"';
-    $headers['Cross-Origin-Resource-Policy'] = 'cross-origin';
-    $headers['X-Frame-Options'] = 'SAMEORIGIN';
-    $headers['Feature-Policy'] = "display-capture 'self'";
-    $headers['X-Permitted-Cross-Domain-Policies'] = "none";  
-
-    return $headers;
-}
-
-//Response headers for blog / webpage
-//add_filter('wp_headers', 'wp_capthack_header_todo'); Replaced by send_headers hook
-
-function wp_capthack_header_send() {
 	header( 'X-XSS-Protection: 1; mode=block' );
-	header( 'Strict-Transport-Security: max-age=63072000; includeSubDomains; preload' );
 	header( 'Expect-CT: max-age=7776000, enforce' );
 	header( 'Access-Control-Allow-Origin: null' );
 	header( 'Access-Control-Allow-Methods: GET,PUT,POST' );
@@ -447,9 +432,8 @@ function wp_capthack_header_send() {
 	header( 'Cross-Origin-Opener-Policy-Report-Only: same-origin; report-to="default"' );
 	header( 'Cross-Origin-Opener-Policy: same-origin-allow-popups; report-to="default"' );
     header( 'Cross-Origin-Resource-Policy: cross-origin' );
-    header( 'X-Frame-Options: SAMEORIGIN' );
     header( "Feature-Policy: display-capture 'self'");
-    header( 'X-Permitted-Cross-Domain-Policies: none' );  
+    header( 'X-Permitted-Cross-Domain-Policies: none' );
 }
 
 add_action( 'send_headers', 'wp_capthack_header_send' );
@@ -509,21 +493,6 @@ add_filter('rest_authentication_errors', function ($result) {
 
     return $result;
 });
-
-//Disable User Enumeration
-/* Removed because it generates a problem on PHP 8.1 and Wordpress 6.4
-function wp_capthack_disable_user_enumeration(){
-
-    if (!is_admin()) {
-        // default URL format
-        if (preg_match('/author=([0-9]*)/i', $_SERVER['QUERY_STRING'])){
-             wp_redirect( get_option('home'), 302 ); exit;
-        }
-        add_filter('redirect_canonical', 'shapeSpace_check_enum', 10, 2);
-    }
-}
-
-add_action('init', 'wp_capthack_disable_user_enumeration'); */
 
 function wp_capthack_csrf_generate_hidden_fields( $fields ){
 
@@ -709,7 +678,7 @@ function wp_capthack_place_sandbox_attribute_oembed($html, $data, $url){
     $final_embed_content = '';
 
     if ( $data->type === 'video' || $data->type === 'link' ){
-        $final_embed_content = $html_parts[0] . ' sandbox="allow-scripts allow-same-origin allow-popups"';
+        $final_embed_content = $html_parts[0] . ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"';
     } else {
         $final_embed_content = $html_parts[0];
     }
